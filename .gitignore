@@ -1,6 +1,5 @@
 # Node & Frontend
 node_modules/
-frontend/dist/
 .vite/
 
 # Python & Backend
