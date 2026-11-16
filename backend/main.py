@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
-app = FastAPI(title="Retail Sales Analytics API", version="1.0")
+app = FastAPI(title="Retail Sales Analytics API", version="2.1")
 
 app.add_middleware(
     CORSMiddleware,
@@ -14,32 +14,45 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 1. API Routes (Must come BEFORE static file catch-all)
+# 1. API Endpoints
 @app.get("/api/health")
 def health_check():
-    return {"status": "healthy", "service": "databricks-retail-backend"}
+    return {"status": "healthy", "service": "databricks-retail-backend", "mode": "databricks-uc-ready"}
 
 @app.get("/api/sales-summary")
 def get_sales_summary():
     return {
-        "total_revenue": 1245500.50,
-        "total_orders": 8420,
-        "top_category": "Electronics",
+        "total_revenue": 1450200.00,
+        "total_orders": 9120,
+        "top_category": "Home Appliances",
         "recent_transactions": [
-            {"id": "TXN-1001", "store": "Noida Sector 18", "amount": 4500.00, "status": "Completed"},
-            {"id": "TXN-1002", "store": "Greater Noida", "amount": 1200.50, "status": "Completed"},
-            {"id": "TXN-1003", "store": "Delhi NCR", "amount": 8900.00, "status": "Pending"}
+            {"id": "TXN-2001", "store": "Noida Sector 62", "amount": 6200.00, "status": "Completed"},
+            {"id": "TXN-2002", "store": "Greater Noida West", "amount": 3400.00, "status": "Completed"},
+            {"id": "TXN-2003", "store": "Delhi Connaught Place", "amount": 12500.00, "status": "Processing"}
         ]
     }
 
-# 2. Serve Compiled React Frontend (Databricks Apps Production Pattern)
-frontend_dist_path = os.path.join(os.path.dirname(__file__), "..", "frontend", "dist")
+# 2. Robust Frontend Static Mounting (Databricks Apps Container Path)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+FRONTEND_DIST = os.path.abspath(os.path.join(BASE_DIR, "..", "frontend", "dist"))
 
-if os.path.exists(frontend_dist_path):
-    app.mount("/assets", StaticFiles(directory=os.path.join(frontend_dist_path, "assets")), name="assets")
+if os.path.exists(FRONTEND_DIST):
+    # Mount static assets folder
+    assets_path = os.path.join(FRONTEND_DIST, "assets")
+    if os.path.exists(assets_path):
+        app.mount("/assets", StaticFiles(directory=assets_path), name="assets")
 
+    # Serve index.html for root and any unmatched non-API routes (React Router support)
     @app.get("/{full_path:path}")
     async def serve_react_app(full_path: str):
-        # Serve index.html for any non-API route (supports React Router)
-        index_file = os.path.join(frontend_dist_path, "index.html")
-        return FileResponse(index_file)
+        # If an API route wasn't matched above, return 404 instead of index.html
+        if full_path.startswith("api/"):
+            return {"detail": "Not Found"}
+        index_file = os.path.join(FRONTEND_DIST, "index.html")
+        if os.path.exists(index_file):
+            return FileResponse(index_file)
+        return {"detail": "Frontend build index.html not found"}
+else:
+    @app.get("/")
+    def root_fallback():
+        return {"message": "FastAPI backend is running, but frontend/dist directory was not found during build."}
